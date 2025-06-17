@@ -579,7 +579,19 @@ fun MainScreen(
 
 @Composable
 fun HomeScreen(viewModel: ExpenseViewModel) {
-    val balance by remember { derivedStateOf { viewModel.getTotalBalance() } }
+    val context = LocalContext.current
+    val storedTransactions = remember {
+        val activity = context as? MainActivity
+        activity?.getStoredTransactions() ?: emptyList()
+    }
+    
+    // Calculate balance from both expenses and stored transactions
+    val storedBalance = storedTransactions.fold(0.0) { acc, transaction ->
+        val amount = transaction.amount.replace(",", "").toDoubleOrNull() ?: 0.0
+        acc + (if (transaction.status == "Credited") amount else -amount)
+    }
+    val expenseBalance by remember { derivedStateOf { viewModel.getTotalBalance() } }
+    val totalBalance = storedBalance + expenseBalance
 
     Column(
         modifier = Modifier
@@ -600,9 +612,73 @@ fun HomeScreen(viewModel: ExpenseViewModel) {
                     style = MaterialTheme.typography.titleMedium
                 )
                 Text(
-                    text = "$${String.format("%.2f", balance)}",
+                    text = "₹${String.format("%.2f", totalBalance)}",
                     style = MaterialTheme.typography.headlineLarge
                 )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Text(
+            text = "Recent Transactions",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        
+        // Show both stored transactions and expenses
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+        val allTransactions = storedTransactions.map { transaction ->
+            Triple(
+                transaction.time,
+                "SMS Transaction",
+                "${if (transaction.status == "Debited") "-" else "+"}₹${transaction.amount}"
+            )
+        } + viewModel.expenses.value.map { expense ->
+            Triple(
+                dateFormat.format(expense.date),
+                expense.description,
+                "${if (expense.type == ExpenseType.EXPENSE) "-" else "+"}₹${String.format("%.2f", expense.amount)}"
+            )
+        }
+        
+        allTransactions.sortedByDescending { 
+            try {
+                dateFormat.parse(it.first)?.time ?: 0L
+            } catch (e: Exception) {
+                0L
+            }
+        }.take(5).forEach { (time, description, amount) ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = description,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = time,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Text(
+                        text = amount,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (amount.startsWith("-"))
+                            MaterialTheme.colorScheme.error
+                        else
+                            MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
     }
