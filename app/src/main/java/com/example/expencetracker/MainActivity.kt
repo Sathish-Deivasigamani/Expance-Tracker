@@ -424,12 +424,14 @@ class MainActivity : ComponentActivity() {
                     loadingState.value = false
                 }
             }
+            // Automatically load messages on app start
+            reloadMessages?.invoke()
             ExpenceTrackerTheme {
                 MainScreen(
                     selectedTab = selectedTab,
                     onTabSelected = { tabIdx ->
                         selectedTab = tabIdx
-                        if (tabIdx == 4) {
+                        if (tabIdx == 1) {
                             // Message tab
                             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED) {
                                 reloadMessages?.invoke()
@@ -521,7 +523,7 @@ fun MainScreen(
     messages: List<String> = emptyList(),
     loading: Boolean = false
 ) {
-    val tabs = listOf("Home", "Add", "History", "Scan", "Message", "Stored Transactions")
+    val tabs = listOf("Home", "Re-Scan", "Stored Transactions")
 
     Scaffold(
         topBar = {
@@ -541,11 +543,8 @@ fun MainScreen(
                             Icon(
                                 imageVector = when (index) {
                                     0 -> Icons.Filled.Home
-                                    1 -> Icons.Filled.Add
+                                    1 -> Icons.Filled.List
                                     2 -> Icons.Filled.List
-                                    3 -> Icons.Filled.List
-                                    4 -> Icons.Filled.List
-                                    5 -> Icons.Filled.List
                                     else -> Icons.Filled.Home
                                 },
                                 contentDescription = title
@@ -553,13 +552,7 @@ fun MainScreen(
                         },
                         label = { Text(title) },
                         selected = selectedTab == index,
-                        onClick = {
-                            if (title == "Scan") {
-                                onScanClick()
-                            } else {
-                                onTabSelected(index)
-                            }
-                        }
+                        onClick = { onTabSelected(index) }
                     )
                 }
             }
@@ -568,10 +561,8 @@ fun MainScreen(
         Box(modifier = Modifier.padding(paddingValues)) {
             when (selectedTab) {
                 0 -> HomeScreen(expenseViewModel)
-                1 -> AddExpenseScreen(expenseViewModel)
-                2 -> HistoryScreen(expenseViewModel)
-                4 -> MessageScreen(messages, loading)
-                5 -> TransactionsJsonScreen(forceUpdate = true)
+                1 -> MessageScreen(messages, loading)
+                2 -> TransactionsJsonScreen(forceUpdate = true)
             }
         }
     }
