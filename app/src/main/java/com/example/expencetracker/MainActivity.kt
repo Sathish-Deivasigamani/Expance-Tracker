@@ -575,13 +575,19 @@ fun HomeScreen(viewModel: ExpenseViewModel) {
         val activity = context as? MainActivity
         activity?.getStoredTransactions() ?: emptyList()
     }
-    
+    // Observe expenses StateFlow
+    val expenses by viewModel.expenses.collectAsState()
     // Calculate balance from both expenses and stored transactions
     val storedBalance = storedTransactions.fold(0.0) { acc, transaction ->
         val amount = transaction.amount.replace(",", "").toDoubleOrNull() ?: 0.0
         acc + (if (transaction.status == "Credited") amount else -amount)
     }
-    val expenseBalance by remember { derivedStateOf { viewModel.getTotalBalance() } }
+    val expenseBalance = expenses.fold(0.0) { acc, expense ->
+        when (expense.type) {
+            ExpenseType.INCOME -> acc + expense.amount
+            ExpenseType.EXPENSE -> acc - expense.amount
+        }
+    }
     val totalBalance = storedBalance + expenseBalance
 
     Column(
@@ -625,7 +631,7 @@ fun HomeScreen(viewModel: ExpenseViewModel) {
                 "SMS Transaction",
                 "${if (transaction.status == "Debited") "-" else "+"}₹${transaction.amount}"
             )
-        } + viewModel.expenses.value.map { expense ->
+        } + expenses.map { expense ->
             Triple(
                 dateFormat.format(expense.date),
                 expense.description,
