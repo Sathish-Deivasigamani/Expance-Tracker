@@ -63,7 +63,7 @@ data class TransactionInfo(
 class MainActivity : ComponentActivity() {
     private lateinit var messages: MutableList<String>
     private var reloadMessages: (() -> Unit)? = null
-    private val chatGptService = ChatGptService("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")
+    private val chatGptService = ChatGptService()
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -764,6 +764,7 @@ fun HomeScreen(viewModel: ExpenseViewModel, storedTransactions: List<Transaction
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
+            .verticalScroll(rememberScrollState())
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
