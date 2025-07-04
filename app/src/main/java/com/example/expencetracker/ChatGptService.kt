@@ -9,32 +9,26 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import android.util.Log
 
-class ChatGptService(private val apiKey: String) {
+class ChatGptService() {
     private val client = OkHttpClient()
     private val gson = Gson()
-    private val mediaType = "application/json; charset=utf-8".toMediaType()
+    private val mediaType = "text/plain".toMediaType()
 
     suspend fun summarizeMessage(message: String): String = withContext(Dispatchers.IO) {
-        val prompt = """
-            Summarize this SMS transaction in a single line, extracting amount, type (credit/debit), and any other key info:
-            $message
-        """.trimIndent()
-
+        val prompt = message
+        Log.d("ChatGptService", "[REQUEST] summarizeMessage prompt: $prompt")
         val requestBody = gson.toJson(
             mapOf(
-                "model" to "gpt-3.5-turbo",
-                "messages" to listOf(
-                    mapOf("role" to "system", "content" to "You are a financial SMS summarizer."),
-                    mapOf("role" to "user", "content" to prompt)
-                ),
-                "max_tokens" to 60
+                "model" to "llama3",
+                "prompt" to prompt,
+                "stream" to false
             )
         ).toRequestBody(mediaType)
 
         val request = Request.Builder()
-            .url("https://api.openai.com/v1/chat/completions")
-            .addHeader("Authorization", "Bearer $apiKey")
-            .addHeader("Content-Type", "application/json")
+            .url("https://b0e8-2401-4900-1cd0-e2dc-8cd8-c186-5ff1-55f2.ngrok-free.app/api/generate")
+            .addHeader("Content-Type", "text/plain")
+            .addHeader("User-Agent", "Mozilla/5.0")
             .post(requestBody)
             .build()
 
@@ -42,138 +36,86 @@ class ChatGptService(private val apiKey: String) {
         if (response.isSuccessful) {
             val body = response.body?.string()
             val json = gson.fromJson(body, Map::class.java)
-            val choices = json["choices"] as? List<*>
-            val messageObj = (choices?.firstOrNull() as? Map<*, *>)?.get("message") as? Map<*, *>
-            messageObj?.get("content")?.toString() ?: "No summary"
+            val summary = json["response"]?.toString() ?: "No summary"
+            Log.d("ChatGptService", "[RESPONSE] summarizeMessage summary: $summary")
+            summary
         } else {
-            "Error: ${response.code} - ${response.message}"
+            val error = "Error: ${response.code} - ${response.message}"
+            Log.d("ChatGptService", "[RESPONSE] summarizeMessage error: $error")
+            error
         }
     }
 
     suspend fun summarizeTransaction(transaction: TransactionInfo): String = withContext(Dispatchers.IO) {
-        Log.d("ChatGptService", "Starting transaction summarization for: ₹${transaction.amount} ${transaction.status}")
-        
-        // Use the original SMS text if available, otherwise fall back to formatted data
         val textToSummarize = if (transaction.originalSmsText.isNotEmpty()) {
-            Log.d("ChatGptService", "Using original SMS text for summarization")
             transaction.originalSmsText
         } else {
-            Log.d("ChatGptService", "Original SMS text not available, using formatted data")
-            """
-            Amount: ${transaction.amount}
-            Type: ${transaction.status}
-            Time: ${transaction.time}
-            Balance: ${transaction.acBal ?: "Not available"}
-            """.trimIndent()
+            "Amount: ${transaction.amount}\nType: ${transaction.status}\nTime: ${transaction.time}\nBalance: ${transaction.acBal ?: "Not available"}"
         }
-
-        val prompt = """
-            Summarize this financial SMS transaction in a clear, user-friendly way. Extract the key information and present it in natural language:
-            
-            $textToSummarize
-            
-            Please provide a concise summary that a user would understand easily.
-        """.trimIndent()
-
-        Log.d("ChatGptService", "Sending prompt to ChatGPT: $prompt")
-
+        val instruction = """
+Summarize the following transaction SMS in this format:\nExpense Type: Credit or Debit\nAmount: XXX\nCurrency: INR\nTimestamp: DDMMYYHHMM\nSource:\nCategory:\nSubCategory:\nCustom1:\nCustom2:\n\nSMS: $textToSummarize
+""".trimIndent()
+        val prompt = instruction
+        Log.d("ChatGptService", "[REQUEST] summarizeTransaction prompt: $prompt")
         val requestBody = gson.toJson(
             mapOf(
-                "model" to "gpt-3.5-turbo",
-                "messages" to listOf(
-                    mapOf("role" to "system", "content" to "You are a financial transaction summarizer. Provide clear, concise summaries of banking SMS transactions."),
-                    mapOf("role" to "user", "content" to prompt)
-                ),
-                "max_tokens" to 100,
-                "temperature" to 0.3
+                "model" to "llama3",
+                "prompt" to prompt,
+                "stream" to false
             )
         ).toRequestBody(mediaType)
-
         val request = Request.Builder()
-            .url("https://api.openai.com/v1/chat/completions")
-            .addHeader("Authorization", "Bearer $apiKey")
-            .addHeader("Content-Type", "application/json")
+            .url("https://b0e8-2401-4900-1cd0-e2dc-8cd8-c186-5ff1-55f2.ngrok-free.app/api/generate")
+            .addHeader("Content-Type", "text/plain")
+            .addHeader("User-Agent", "Mozilla/5.0")
             .post(requestBody)
             .build()
-
         val response = client.newCall(request).execute()
         if (response.isSuccessful) {
             val body = response.body?.string()
             val json = gson.fromJson(body, Map::class.java)
-            val choices = json["choices"] as? List<*>
-            val messageObj = (choices?.firstOrNull() as? Map<*, *>)?.get("message") as? Map<*, *>
-            val summary = messageObj?.get("content")?.toString() ?: "Transaction: ₹${transaction.amount} ${transaction.status}"
-            
-            Log.d("ChatGptService", "ChatGPT Summary Generated: $summary")
-            Log.i("ChatGptService", "=== TRANSACTION SUMMARY ===")
-            Log.i("ChatGptService", "Original SMS: ${transaction.originalSmsText}")
-            Log.i("ChatGptService", "Parsed Amount: ₹${transaction.amount}")
-            Log.i("ChatGptService", "Parsed Status: ${transaction.status}")
-            Log.i("ChatGptService", "AI Summary: $summary")
-            Log.i("ChatGptService", "==========================")
-            
+            val summary = json["response"]?.toString() ?: "Transaction: ₹${transaction.amount} ${transaction.status}"
+            Log.d("ChatGptService", "[RESPONSE] summarizeTransaction summary: $summary")
             summary
         } else {
-            val errorMsg = "Transaction: ₹${transaction.amount} ${transaction.status}"
-            Log.e("ChatGptService", "API Error: ${response.code} - ${response.message}")
-            Log.e("ChatGptService", "Using fallback summary: $errorMsg")
-            errorMsg
+            val errorBody = response.body?.string()
+            val error = "Transaction: ₹${transaction.amount} ${transaction.status}"
+            Log.d("ChatGptService", "[RESPONSE] summarizeTransaction error: $error, error body: $errorBody")
+            error
         }
     }
 
-    // New method to summarize raw SMS text directly
     suspend fun summarizeRawSms(smsText: String): String = withContext(Dispatchers.IO) {
-        Log.d("ChatGptService", "Starting raw SMS summarization")
-        
-        val prompt = """
-            Summarize this financial SMS transaction in a clear, user-friendly way. Extract the key information and present it in natural language:
-            
-            $smsText
-            
-            Please provide a concise summary that a user would understand easily.
-        """.trimIndent()
-
-        Log.d("ChatGptService", "Sending raw SMS to ChatGPT: $prompt")
-
+        val instruction = """
+Summarize the following transaction SMS in this format:\nExpense Type: Credit or Debit\nAmount: XXX\nCurrency: INR\nTimestamp: DDMMYYHHMM\nSource:\nCategory:\nSubCategory:\nCustom1:\nCustom2:\n\nSMS: $smsText
+""".trimIndent()
+        val prompt = instruction
+        Log.d("ChatGptService", "[REQUEST] summarizeRawSms prompt: $prompt")
         val requestBody = gson.toJson(
             mapOf(
-                "model" to "gpt-3.5-turbo",
-                "messages" to listOf(
-                    mapOf("role" to "system", "content" to "You are a financial transaction summarizer. Provide clear, concise summaries of banking SMS transactions."),
-                    mapOf("role" to "user", "content" to prompt)
-                ),
-                "max_tokens" to 100,
-                "temperature" to 0.3
+                "model" to "llama3",
+                "prompt" to prompt,
+                "stream" to false
             )
         ).toRequestBody(mediaType)
-
         val request = Request.Builder()
-            .url("https://api.openai.com/v1/chat/completions")
-            .addHeader("Authorization", "Bearer $apiKey")
-            .addHeader("Content-Type", "application/json")
+            .url("https://b0e8-2401-4900-1cd0-e2dc-8cd8-c186-5ff1-55f2.ngrok-free.app/api/generate")
+            .addHeader("Content-Type", "text/plain")
+            .addHeader("User-Agent", "Mozilla/5.0")
             .post(requestBody)
             .build()
-
         val response = client.newCall(request).execute()
         if (response.isSuccessful) {
             val body = response.body?.string()
             val json = gson.fromJson(body, Map::class.java)
-            val choices = json["choices"] as? List<*>
-            val messageObj = (choices?.firstOrNull() as? Map<*, *>)?.get("message") as? Map<*, *>
-            val summary = messageObj?.get("content")?.toString() ?: "Unable to summarize"
-            
-            Log.d("ChatGptService", "Raw SMS Summary Generated: $summary")
-            Log.i("ChatGptService", "=== RAW SMS SUMMARY ===")
-            Log.i("ChatGptService", "Original SMS: $smsText")
-            Log.i("ChatGptService", "AI Summary: $summary")
-            Log.i("ChatGptService", "======================")
-            
+            val summary = json["response"]?.toString() ?: "Unable to summarize"
+            Log.d("ChatGptService", "[RESPONSE] summarizeRawSms summary: $summary")
             summary
         } else {
-            val errorMsg = "Unable to summarize SMS"
-            Log.e("ChatGptService", "API Error: ${response.code} - ${response.message}")
-            Log.e("ChatGptService", "Using fallback summary: $errorMsg")
-            errorMsg
+            val errorBody = response.body?.string()
+            val error = "Unable to summarize SMS"
+            Log.d("ChatGptService", "[RESPONSE] summarizeRawSms error: $error, error body: $errorBody")
+            error
         }
     }
-} 
+}
