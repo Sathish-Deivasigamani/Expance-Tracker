@@ -14,7 +14,7 @@ class ChatGptService {
     private val gson = Gson()
     private val mediaType = "application/json".toMediaType()
 
-    private val apiKey = "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"
+    private val apiKey = "API KEY"
     private val apiUrl = "https://api.openai.com/v1/chat/completions"
 
     private suspend fun sendPrompt(prompt: String): String = withContext(Dispatchers.IO) {
