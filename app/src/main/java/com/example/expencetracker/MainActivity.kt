@@ -684,10 +684,10 @@ fun MainScreen(
     val tabs = listOf("Home", "Stored Transactions") // Remove AI Summaries tab
     val context = LocalContext.current
     var storedTransactions by remember {
-        mutableStateOf((context as? MainActivity)?.getStoredTransactions() ?: emptyList())
+        mutableStateOf((context as? MainActivity)?.getStoredTransactions()?.asReversed() ?: emptyList())
     }
     val refreshTransactions = {
-        storedTransactions = (context as? MainActivity)?.getStoredTransactions() ?: emptyList()
+        storedTransactions = (context as? MainActivity)?.getStoredTransactions()?.asReversed() ?: emptyList()
     }
     // Auto-refresh data when tab changes or when new data is available
     LaunchedEffect(selectedTab) {
@@ -1050,12 +1050,12 @@ fun TransactionsJsonScreen(forceUpdate: Boolean = false, onTransactionsUpdated: 
     val context = LocalContext.current
     var transactions by remember(forceUpdate) {
         mutableStateOf(
-            (context as? MainActivity)?.getStoredTransactions() ?: emptyList()
+            (context as? MainActivity)?.getStoredTransactions()?.asReversed() ?: emptyList()
         )
     }
     var editingTransaction by remember { mutableStateOf<TransactionInfo?>(null) }
     val refreshTransactions = {
-        transactions = (context as? MainActivity)?.getStoredTransactions() ?: emptyList()
+        transactions = (context as? MainActivity)?.getStoredTransactions()?.asReversed() ?: emptyList()
     }
     if (editingTransaction != null) {
         EditTransactionDialog(
