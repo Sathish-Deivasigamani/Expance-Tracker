@@ -61,6 +61,32 @@ data class TransactionInfo(
 )
 
 class MainActivity : ComponentActivity() {
+    // ScanDialog composable for scan tab
+    @Composable
+    fun ScanDialog(onCamera: () -> Unit, onGallery: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("Scan Transaction", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(24.dp))
+        Button(onClick = onCamera, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Filled.List, contentDescription = "Camera")
+            Spacer(Modifier.width(8.dp))
+            Text("Camera")
+        }
+        Spacer(Modifier.height(16.dp))
+        Button(onClick = onGallery, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Filled.List, contentDescription = "Gallery")
+            Spacer(Modifier.width(8.dp))
+            Text("Upload from Gallery")
+        }
+    }
+}
+
     private lateinit var messages: MutableList<String>
     private var reloadMessages: (() -> Unit)? = null
     private val chatGptService = ChatGptService()
@@ -96,22 +122,77 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private var showImageSummaryDialog by mutableStateOf(false)
+    private var imageSummaryText by mutableStateOf("")
     private val takePictureLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == RESULT_OK) {
-            val imageBitmap = result.data?.extras?.get("data") as? Bitmap
-            // Handle the captured imageBitmap here (e.g., show in UI or save)
+            val data = result.data
+            val imageBitmap: Bitmap? = when {
+                data?.extras?.get("data") is Bitmap -> data.extras?.get("data") as? Bitmap
+                data?.data != null -> {
+                    val uri = data.data
+                    try {
+                        MediaStore.Images.Media.getBitmap(contentResolver, uri)
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+                else -> null
+            }
+            if (imageBitmap != null) {
+                // Convert bitmap to base64
+                val outputStream = java.io.ByteArrayOutputStream()
+                imageBitmap.compress(Bitmap.CompressFormat.JPEG, 90, outputStream)
+                val imageBytes = outputStream.toByteArray()
+                val base64Image = android.util.Base64.encodeToString(imageBytes, android.util.Base64.DEFAULT)
+                // Send to ChatGPT for summarization
+                summarizeImageWithChatGpt(base64Image)
+            }
         }
     }
 
-    private fun openCamera() {
+    private fun summarizeImageWithChatGpt(base64Image: String) {
+        lifecycleScope.launch {
+            try {
+                imageSummaryText = "Summarizing..."
+                showImageSummaryDialog = true
+                val summary = chatGptService.summarizeImage(base64Image)
+                imageSummaryText = summary
+                // Store the summary as a transaction
+                chatGptService.storeImageSummary(this@MainActivity, summary)
+            } catch (e: Exception) {
+                imageSummaryText = "Error: ${e.message}"
+            }
+        }
+    }
+    @Composable
+    fun ImageSummaryDialog(show: Boolean, summary: String, onDismiss: () -> Unit) {
+        if (show) {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text("Image Summary") },
+                text = { Text(summary) },
+                confirmButton = {
+                    Button(onClick = onDismiss) { Text("OK") }
+                }
+            )
+        }
+    }
+
+    fun openCamera() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
             takePictureLauncher.launch(cameraIntent)
         } else {
             requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
+    }
+
+    fun openGallery() {
+        val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+        takePictureLauncher.launch(intent)
     }
 
     fun parseTransactionSms(body: String, date: Long, address: String?): TransactionInfo? {
@@ -592,6 +673,11 @@ class MainActivity : ComponentActivity() {
                         messages = messagesState,
                         loading = loadingState.value
                     )
+                    ImageSummaryDialog(
+                        show = showImageSummaryDialog,
+                        summary = imageSummaryText,
+                        onDismiss = { showImageSummaryDialog = false }
+                    )
                 }
             }
         }
@@ -681,7 +767,7 @@ fun MainScreen(
     messages: List<String> = emptyList(),
     loading: Boolean = false
 ) {
-    val tabs = listOf("Home", "Stored Transactions") // Remove AI Summaries tab
+    val tabs = listOf("Home", "Scan", "Stored Transactions")
     val context = LocalContext.current
     var storedTransactions by remember {
         mutableStateOf((context as? MainActivity)?.getStoredTransactions()?.asReversed() ?: emptyList())
@@ -719,6 +805,7 @@ fun MainScreen(
                                 imageVector = when (index) {
                                     0 -> Icons.Filled.Home
                                     1 -> Icons.Filled.List
+                                    2 -> Icons.Filled.List
                                     else -> Icons.Filled.Home
                                 },
                                 contentDescription = title
@@ -739,7 +826,14 @@ fun MainScreen(
                     val refreshedStoredTransactions = (context as? MainActivity)?.getStoredTransactions() ?: emptyList()
                     HomeScreen(expenseViewModel, refreshedStoredTransactions)
                 }
-                1 -> TransactionsJsonScreen(forceUpdate = true, onTransactionsUpdated = refreshTransactions)
+                1 -> {
+                    // Show ScanDialog for Scan tab
+                    (context as? MainActivity)?.ScanDialog(
+                        onCamera = { (context as? MainActivity)?.openCamera() },
+                        onGallery = { (context as? MainActivity)?.openGallery() }
+                    )
+                }
+                2 -> TransactionsJsonScreen(forceUpdate = true, onTransactionsUpdated = refreshTransactions)
             }
         }
     }
