@@ -41,6 +41,7 @@ class ChatGptService {
     private val apiKey = "API Key"
     private val apiUrl = "https://api.openai.com/v1/chat/completions"
 
+
     /**
      * Summarizes an image using GPT-4o Vision model
      */
@@ -79,6 +80,7 @@ class ChatGptService {
                 val json = gson.fromJson(body, Map::class.java)
                 val choices = json["choices"] as? List<*>
                 val summary = if (!choices.isNullOrEmpty()) {
+
                     val first = choices[0] as? Map<*, *>
                     val message = first?.get("message") as? Map<*, *>
                     message?.get("content")?.toString() ?: "No summary"
@@ -193,6 +195,7 @@ class ChatGptService {
 
             SMS: $smsText
         """.trimIndent()
+
 
         Log.d("ChatGptService", "[REQUEST] summarizeRawSms prompt: $prompt")
         return sendPrompt(prompt)
