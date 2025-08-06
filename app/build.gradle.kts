@@ -49,6 +49,7 @@ android {
     }
 }
 
+
 dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.1")
     implementation(libs.androidx.core.ktx)
@@ -66,6 +67,9 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     // Coroutines for async operations
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.6.4")
+    // ML Kit Text Recognition
+    implementation("com.google.mlkit:text-recognition:16.0.0")
     
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -74,4 +78,13 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+}
+
+// Force correct version for coroutines-play-services
+configurations.all {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "org.jetbrains.kotlinx" && requested.name == "kotlinx-coroutines-play-services") {
+            useVersion("1.6.4")
+        }
+    }
 }
